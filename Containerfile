@@ -1,3 +1,4 @@
+ARG SSLPROXY_REPO_URL=https://github.com/sonertari/SSLproxy.git
 FROM registry.fedoraproject.org/fedora-minimal:latest AS base
 RUN microdnf install -y \
   openssl \
@@ -18,7 +19,7 @@ RUN microdnf install -y --nodocs --setopt install_weak_deps=0 \
   wget unzip \
   git-core \
   && microdnf clean all -y
-ARG SSLPROXY_REPO_URL=https://github.com/sonertari/SSLproxy.git
+ARG SSLPROXY_REPO_URL
 RUN mkdir -p /work /opt/sslproxy && \
   git clone ${SSLPROXY_REPO_URL} /work/SSLproxy && \
   make -C /work/SSLproxy PREFIX=/usr all install
@@ -26,15 +27,17 @@ RUN mkdir -p /work /opt/sslproxy && \
 FROM base
 RUN printf '%s\n' 'sslproxy:x:1000:1000::/sslproxy:/bin/bash' >> /etc/passwd && \
   printf '%s\n' 'sslproxy:x:1000:' >> /etc/group && \
-  mkdir -p /sslproxy/cert/gen /sslproxy/log/pcap /sslproxy/log/content && \
+  mkdir -p /sslproxy/ca /sslproxy/certs /sslproxy/log/pcap && \
   chown -R sslproxy:sslproxy /sslproxy
 COPY --from=builder /usr/bin/sslproxy /usr/bin/sslproxy
 COPY --from=builder /usr/share/examples/sslproxy/sslproxy.conf /etc/sslproxy/sslproxy.conf.example
 COPY --from=builder /usr/share/man/man1/sslproxy.1 /usr/share/man/man1/sslproxy.1
 COPY --from=builder /usr/share/man/man5/sslproxy.conf.5 /usr/share/man/man5/sslproxy.conf.5
+COPY files/x509v3ca.cnf /etc/sslproxy/x509v3ca.cnf
+COPY files/entrypoint.sh /entrypoint.sh
 EXPOSE 10443
 VOLUME /sslproxy
 WORKDIR /sslproxy
 USER sslproxy
-ENTRYPOINT ["/usr/bin/sslproxy"]
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["-h"]
